@@ -1,0 +1,15 @@
+TEMPLATE = app
+CONFIG += console c++17
+CONFIG -= app_bundle
+CONFIG -= qt
+
+SOURCES += \
+        main.cpp \
+        solver.cpp \
+        sysinfo.cpp
+
+LIBS += -lstdc++fs
+
+HEADERS += \
+    solver.h \
+    sysinfo.h
