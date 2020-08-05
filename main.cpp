@@ -475,11 +475,11 @@ int main(int argc, char *argv[])
         case 'n': numAddressTotal = atoi(optarg); break;
         case 'a': numAccess = atoi(optarg); break;
         default:
-            std::cout <<"Usage: " << argv[0]
-                      << "[-d] Disables compatibility checks\n "
+            std::cout <<"Usage: " << argv[0] <<"\n"
+                      << "[-d] Disables compatibility checks\n"
                       << "[-s <memPoolSize>]\n"
                       << "[-n <number of samples collected>]\n"
-                      << "[-a <number of accesses for one component test>\n"
+                      << "[-a <number of accesses for one component test>]\n"
                       << "Must be run as root to resolve physical addresses\n"
                       << "Must be pinned to one socket and its local memory\n";
             exit(EXIT_FAILURE);
