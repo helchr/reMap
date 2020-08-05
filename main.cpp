@@ -41,62 +41,60 @@ using namespace std;
 #define PAGEMAP_LENGTH 8
 
 static int g_pagemap_fd = -1;
-const uint64_t SIZE_GB = 20;
-const uint64_t SIZE = SIZE_GB * 1024 * 1024 * 1024ULL;
-const uint64_t NUM_ACCESS = 2000;
 
 typedef std::map<size_t,std::vector<uint64_t>> AddressSet;
 
 
-void* tryAllocate1Gb()
+void* tryAllocate1Gb(uint64_t size)
 {
-    auto space = mmap(nullptr, SIZE, PROT_READ | PROT_WRITE,
+    auto space = mmap(nullptr, size, PROT_READ | PROT_WRITE,
                   MAP_POPULATE | MAP_ANONYMOUS | MAP_PRIVATE | MAP_HUGETLB | MAP_HUGE_1GB
                     , -1, 0);
     return space;
 }
 
-void* tryAllocate2Mb()
+void* tryAllocate2Mb(uint64_t size)
 {
-    auto space = mmap(nullptr, SIZE, PROT_READ | PROT_WRITE,
+    auto space = mmap(nullptr, size, PROT_READ | PROT_WRITE,
                   MAP_POPULATE | MAP_ANONYMOUS | MAP_PRIVATE | MAP_HUGETLB | MAP_HUGE_2MB
                     , -1, 0);
     return space;
 }
 
-void* tryAllocate4Kb()
+void* tryAllocate4Kb(uint64_t size)
 {
-    auto space = mmap(nullptr, SIZE, PROT_READ | PROT_WRITE,
+    auto space = mmap(nullptr, size, PROT_READ | PROT_WRITE,
                   MAP_POPULATE | MAP_ANONYMOUS | MAP_PRIVATE
                     , -1, 0);
     return space;
 }
 
 
-void* allocate()
+void* allocate(uint64_t size)
 {
-    auto space = tryAllocate1Gb();
-    auto l = mlock(space,SIZE);
+    auto sizeGb = size / (1024*1024*1024ULL);
+    auto space = tryAllocate1Gb(size);
+    auto l = mlock(space,size);
     if(space != (void*) -1 && l == 0)
     {
-        std::cout << "Allocated " << SIZE_GB << "GB using 1GB pages" << endl;
+        std::cout << "Allocated " << sizeGb << "GB using 1GB pages" << endl;
         return space;
     }
-    space = tryAllocate2Mb();
-    l = mlock(space,SIZE);
+    space = tryAllocate2Mb(size);
+    l = mlock(space,size);
     if(space != (void*) -1 && l == 0)
     {
-        std::cout << "Allocated " << SIZE_GB << "GB using 2MB pages" << endl;
+        std::cout << "Allocated " << sizeGb << "GB using 2MB pages" << endl;
         return space;
     }
-    space = tryAllocate4Kb();
-    l = mlock(space,SIZE);
+    space = tryAllocate4Kb(size);
+    l = mlock(space,size);
     if(space != (void*) -1 && l == 0)
     {
-        std::cout << "Allocated " << SIZE_GB << "GB using 4KB pages" << endl;
+        std::cout << "Allocated " << sizeGb << "GB using 4KB pages" << endl;
         return space;
     }
-        std::cout << "Failed to allocate " << SIZE_GB << "GB" << endl;
+        std::cout << "Failed to allocate " << sizeGb << "GB" << endl;
     return nullptr;
 }
 
@@ -134,10 +132,10 @@ uint64_t getPhysicalAddr(uint64_t virtualAddr) {
     return (frame_num * 4096) | (virtualAddr & (4095));
 }
 
-void access(uint64_t addr)
+void access(uint64_t addr,size_t numAccess)
 {
     volatile uint64_t *p = (volatile uint64_t *) addr;
-    for (unsigned int i = 0; i < NUM_ACCESS; i++)
+    for (unsigned int i = 0; i < numAccess; i++)
     {
         _mm_clflush((void*)p);
         _mm_lfence();
@@ -465,12 +463,25 @@ int main(int argc, char *argv[])
 
     int opt;
     bool doCheck = true;
-    while ((opt = getopt(argc, argv, "d")) != -1) {
-        switch (opt) {
+    unsigned int sizeGb = 20;
+    size_t numAddressTotal = 1000;
+    size_t numAccess = 2000;
+    while ((opt = getopt(argc, argv, "ds:n:a:")) != -1)
+    {
+        switch (opt)
+        {
         case 'd': doCheck = false; break;
+        case 's': sizeGb = atoi(optarg); break;
+        case 'n': numAddressTotal = atoi(optarg); break;
+        case 'a': numAccess = atoi(optarg); break;
         default:
-            std::cout <<"Usage: " << argv[0] << "[-d]\n"
-                     << "Must be run as root to resolve physical addresses\n";
+            std::cout <<"Usage: " << argv[0]
+                      << "[-d] Disables compatibility checks\n "
+                      << "[-s <memPoolSize>]\n"
+                      << "[-n <number of samples collected>]\n"
+                      << "[-a <number of accesses for one component test>\n"
+                      << "Must be run as root to resolve physical addresses\n"
+                      << "Must be pinned to one socket and its local memory\n";
             exit(EXIT_FAILURE);
         }
     }
@@ -494,11 +505,9 @@ int main(int argc, char *argv[])
         }
     }
 
-
-
-
     initPagemap();
-    auto space = (uint64_t) allocate();
+    const uint64_t size = sizeGb * 1024 * 1024 * 1024ULL;
+    auto space = (uint64_t) allocate(size);
     if(space == 0)
     {
         return EXIT_FAILURE;
@@ -513,13 +522,11 @@ int main(int argc, char *argv[])
 
 
 
-    const size_t NUM_ADDRESS_TOTAL = 1000;
     auto adr=space;
 
-    while(usedAddresses.size() < NUM_ADDRESS_TOTAL)
+    while(usedAddresses.size() < numAddressTotal)
     {
-        //auto adr = getRandomAddress(space,SIZE);
-        adr = getNextAddress(adr,space,SIZE);
+        adr = getNextAddress(adr,space,size);
         auto physicalAddress = getPhysicalAddr(adr);
         cout << bitset<64>(physicalAddress) << endl;
         if(usedAddresses.count(physicalAddress) > 0)
@@ -542,9 +549,9 @@ int main(int argc, char *argv[])
                     usleep(1);
                     auto fd = setupMeasure(cpuid,channel,rank,bank);
                     startMeasure(fd);
-                    access(adr);
+                    access(adr,numAccess);
                     auto count = stopMeasure(fd);
-                    if (count >= 0.9*NUM_ACCESS)
+                    if (count >= 0.9*numAccess)
                     {
                         identifiedChannel = channel;
                         identifiedRank = rank;
@@ -557,10 +564,10 @@ int main(int argc, char *argv[])
                 {
                     auto fd = setupMeasure(cpuid,channel,rank,bankGroup,true);
                     startMeasure(fd);
-                    access(adr);
+                    access(adr,numAccess);
                     auto count = stopMeasure(fd);
                     //cout << count << endl;
-                    if (count >= 0.9*NUM_ACCESS)
+                    if (count >= 0.9*numAccess)
                     {
                         identifiedBankGroup = bankGroup;
                         break;
