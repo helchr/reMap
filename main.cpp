@@ -381,20 +381,24 @@ int main(int argc, char *argv[])
 {
 
     int opt;
+    bool verbose = false;
     bool considerTadRegions = false;
     unsigned int sizeGb = 20;
     size_t numAddressTotal = 1000;
     size_t numAccess = 2000;
-    while ((opt = getopt(argc, argv, "rs:n:a:")) != -1)
+    while ((opt = getopt(argc, argv, "vrs:n:a:")) != -1)
     {
         switch (opt)
         {
+        case 'v': verbose=true; break;
         case 'r': considerTadRegions = true; break;
         case 's': sizeGb = atoi(optarg); break;
         case 'n': numAddressTotal = atoi(optarg); break;
         case 'a': numAccess = atoi(optarg); break;
+
         default:
             std::cout <<"Usage: " << argv[0] <<"\n"
+                     << "[-v] Verbose output\n"
                      << "[-r] Resolve addressing function assuming multiple TAD regions\n"
                      << "[-s <memPoolSize>]\n"
                      << "[-n <number of samples collected>]\n"
@@ -413,7 +417,7 @@ int main(int argc, char *argv[])
         cout << "Can not determine node id" << endl;
         return EXIT_FAILURE;
     }
-    cout << "Running on socket " << nodeid << endl;
+    if(verbose) cout << "Running on socket " << nodeid << endl;
 
     initPagemap();
     const uint64_t size = sizeGb * 1024 * 1024 * 1024ULL;
@@ -432,13 +436,13 @@ int main(int argc, char *argv[])
 
 
 
+    cout << "Collecting address samples ..." << endl;
     auto adr=space;
-
     while(usedAddresses.size() < numAddressTotal)
     {
         adr = getNextAddress(adr,space,size);
         auto physicalAddress = getPhysicalAddr(adr);
-        cout << bitset<64>(physicalAddress) << endl;
+        if(verbose) cout << bitset<64>(physicalAddress);
         if(usedAddresses.count(physicalAddress) > 0)
         {
             continue;
@@ -476,7 +480,6 @@ int main(int argc, char *argv[])
                     startMeasure(fd);
                     access(adr,numAccess);
                     auto count = stopMeasure(fd);
-                    //cout << count << endl;
                     if (count >= 0.9*numAccess)
                     {
                         identifiedBankGroup = bankGroup;
@@ -488,34 +491,34 @@ int main(int argc, char *argv[])
         if(found)
         {
             channelAddresses[identifiedChannel].push_back(physicalAddress);
-            //rankAddresses[std::make_tuple(identifiedChannel,identifiedRank)].push_back(physicalAddress);
             rankAddresses[identifiedRank].push_back(physicalAddress);
             bankAddresses[identifiedBank].push_back(physicalAddress);
             bankGroupAddresses[identifiedBankGroup].push_back(physicalAddress);
+            if(verbose) cout << " Channel " << identifiedChannel << " Rank " << identifiedRank << " Bank " << identifiedBank << " BankGroup" << identifiedBankGroup << endl;
         }
         else
         {
-            std::cout << "No set found";
+            if(verbose) std::cout  << " No set found" << endl;
         }
     }
 
     for (size_t i = 0 ;i < 4; i++)
     {
-        std::cout << "caputured: " << channelAddresses[i].size() << " addresses on channel " << i << endl;
+        std::cout << "Caputured " << channelAddresses[i].size() << " addresses on channel " << i << endl;
     }
-
     for (size_t j = 0 ;j < 8; j++)
     {
-        std::cout << "caputured: " << rankAddresses[j].size() << " addresses on rank " << j << endl;
+        std::cout << "Caputured " << rankAddresses[j].size() << " addresses on rank " << j << endl;
     }
     for(size_t k = 0; k < 16; k++)
     {
-        std::cout << "caputured: " << bankAddresses[k].size() << " addresses on bank " << k << endl;
+        std::cout << "Caputured " << bankAddresses[k].size() << " addresses on bank " << k << endl;
     }
     for(size_t k = 0; k < 4; k++)
     {
-        std::cout << "caputured: " << bankGroupAddresses[k].size() << " addresses on bankGroup " << k << endl;
+        std::cout << "Caputured " << bankGroupAddresses[k].size() << " addresses on bankGroup " << k << endl;
     }
+    cout << endl;
 
     uint64_t andAll = std::numeric_limits<uint64_t>::max();
     uint64_t orAll = 0;
@@ -528,8 +531,8 @@ int main(int argc, char *argv[])
     // bits with value 1 in andAll are 1 in all addresses
     std::bitset<64> orAllBits(orAll);
     std::bitset<64> andAllBits(andAll);
-    std::cout << "and all bits: " << andAllBits  << endl;
-    std::cout << "or all bits:  " << orAllBits  << endl;
+    if(verbose) std::cout << "And all bits: " << andAllBits  << endl;
+    if(verbose) std::cout << "Or all bits:  " << orAllBits  << endl;
     std::bitset<64> unknownBits = 0;
     for(size_t i = 0; i < 64; i++)
     {
@@ -538,7 +541,7 @@ int main(int argc, char *argv[])
             unknownBits[i] = 1;
         }
     }
-    std::cout << "Unknown bits: " << unknownBits  << endl;
+    if(verbose) std::cout << "Unknown bits: " << unknownBits  << endl;
 
 
     uint64_t removeFront = 0;
@@ -550,7 +553,7 @@ int main(int argc, char *argv[])
             break;
         }
     }
-    std::cout << "remove " << removeFront << " from front" << endl;
+    if(verbose) std::cout << "Remove " << removeFront << " from front" << endl;
 
     uint64_t removeBack = 0;
     for(size_t i = 64; i-- > 0;)
@@ -561,7 +564,8 @@ int main(int argc, char *argv[])
             break;
         }
     }
-    std::cout << "remove " << removeBack << " from back" << endl;
+    if(verbose) std::cout << "Remove " << removeBack << " from back" << endl;
+    if(verbose) cout << endl;
 
 
     if(considerTadRegions)
