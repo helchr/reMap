@@ -48,24 +48,24 @@ typedef std::map<size_t,std::vector<uint64_t>> AddressSet;
 void* tryAllocate1Gb(uint64_t size)
 {
     auto space = mmap(nullptr, size, PROT_READ | PROT_WRITE,
-                  MAP_POPULATE | MAP_ANONYMOUS | MAP_PRIVATE | MAP_HUGETLB | MAP_HUGE_1GB
-                    , -1, 0);
+                      MAP_POPULATE | MAP_ANONYMOUS | MAP_PRIVATE | MAP_HUGETLB | MAP_HUGE_1GB
+                      , -1, 0);
     return space;
 }
 
 void* tryAllocate2Mb(uint64_t size)
 {
     auto space = mmap(nullptr, size, PROT_READ | PROT_WRITE,
-                  MAP_POPULATE | MAP_ANONYMOUS | MAP_PRIVATE | MAP_HUGETLB | MAP_HUGE_2MB
-                    , -1, 0);
+                      MAP_POPULATE | MAP_ANONYMOUS | MAP_PRIVATE | MAP_HUGETLB | MAP_HUGE_2MB
+                      , -1, 0);
     return space;
 }
 
 void* tryAllocate4Kb(uint64_t size)
 {
     auto space = mmap(nullptr, size, PROT_READ | PROT_WRITE,
-                  MAP_POPULATE | MAP_ANONYMOUS | MAP_PRIVATE
-                    , -1, 0);
+                      MAP_POPULATE | MAP_ANONYMOUS | MAP_PRIVATE
+                      , -1, 0);
     return space;
 }
 
@@ -94,7 +94,7 @@ void* allocate(uint64_t size)
         std::cout << "Allocated " << sizeGb << "GB using 4KB pages" << endl;
         return space;
     }
-        std::cout << "Failed to allocate " << sizeGb << "GB" << endl;
+    std::cout << "Failed to allocate " << sizeGb << "GB" << endl;
     return nullptr;
 }
 
@@ -377,111 +377,30 @@ void prepareSolvePrint(AddressSet adrs,size_t removeFront, size_t removeBack)
     printSolutions(cSol,removeFront);
 }
 
-bool checkConfig(unsigned int nodeid)
-{
-    std::vector<std::vector<unsigned int>> tadRegions;
-    for(unsigned int c = 0; c < 2; c++)
-    {
-        auto reg = SysInfo::readTadRegion(nodeid,c,0);
-        if(reg != 0)
-        {
-            tadRegions.push_back(std::vector<unsigned int>());
-            tadRegions[c].push_back(reg);
-            for(unsigned int r = 1; r < 2; r++)
-            {
-                auto reg = SysInfo::readTadRegion(nodeid,c,r);
-                if(SysInfo::getRegionLimitAddress(reg) != SysInfo::getRegionLimitAddress(tadRegions[c][0]))
-                {
-                    tadRegions[c].push_back(reg);
-                }
-            }
-        }
-    }
-    if(tadRegions.size() == 0)
-    {
-        std::cout << "Found no controllers" << endl;
-        return false;
-    }
-    std::cout << "Found " << tadRegions.size() << " controllers. ";
-    if((tadRegions.size() == 1 && tadRegions[0].size() == 1) ||
-            (tadRegions.size() == 2 && tadRegions[0].size() == 1 && tadRegions[1].size() == 1))
-    {
-        std::cout << "Found one TAD region in each controller." << endl;
-    }
-    else
-    {
-        cout << "Multiple TAD regions are not supported." << endl;
-        return false;
-    }
-
-    std::vector<unsigned int> numChannels;
-    for(unsigned int i = 0; i < tadRegions.size(); i++)
-    {
-        auto cn = SysInfo::getNumberOfChannels(nodeid,i);
-        numChannels.push_back(cn);
-    }
-
-    auto firstOffset = SysInfo::readPerChannelOffsetForTadRegion(nodeid,0,0,0);
-    for(unsigned int i = 0; i < numChannels.size(); i++)
-    {
-        for(unsigned int c = 0; c < numChannels[i]; c++)
-        {
-            auto offset = SysInfo::readPerChannelOffsetForTadRegion(nodeid,i,c,0);
-            if(offset != firstOffset)
-            {
-               cout << "Different TAD offsets are not supported." << endl;
-               return false;
-            }
-        }
-    }
-    cout << "TAD offset OK" << endl;
-
-    auto firstRegion = SysInfo::getRankInterleaveingRegionLimit(SysInfo::readRankInterleavingRegion(nodeid,0,0,0));
-    for(unsigned int i = 0; i < numChannels.size(); i++)
-    {
-        for (unsigned int c = 0; c < numChannels[i]; c++)
-        {
-            //Must be the same on all channels.
-            //If the first two regions have the same limit there is only one region defined.
-            for(unsigned int r = 0; r < 2; r++)
-            {
-                auto region = SysInfo::getRankInterleaveingRegionLimit(SysInfo::readRankInterleavingRegion(nodeid,i,c,r));
-                if(firstRegion != region)
-                {
-                    cout << "Different rank regions are not supported." << endl;
-                    return false;
-                }
-            }
-        }
-    }
-     cout << "Rank configuration OK" << endl;
-     return true;
-}
-
 int main(int argc, char *argv[])
 {
 
     int opt;
-    bool doCheck = true;
+    bool considerTadRegions = false;
     unsigned int sizeGb = 20;
     size_t numAddressTotal = 1000;
     size_t numAccess = 2000;
-    while ((opt = getopt(argc, argv, "ds:n:a:")) != -1)
+    while ((opt = getopt(argc, argv, "rs:n:a:")) != -1)
     {
         switch (opt)
         {
-        case 'd': doCheck = false; break;
+        case 'r': considerTadRegions = true; break;
         case 's': sizeGb = atoi(optarg); break;
         case 'n': numAddressTotal = atoi(optarg); break;
         case 'a': numAccess = atoi(optarg); break;
         default:
             std::cout <<"Usage: " << argv[0] <<"\n"
-                      << "[-d] Disables compatibility checks\n"
-                      << "[-s <memPoolSize>]\n"
-                      << "[-n <number of samples collected>]\n"
-                      << "[-a <number of accesses for one component test>]\n"
-                      << "Must be run as root to resolve physical addresses\n"
-                      << "Must be pinned to one socket and its local memory\n";
+                     << "[-r] Resolve addressing function assuming multiple TAD regions\n"
+                     << "[-s <memPoolSize>]\n"
+                     << "[-n <number of samples collected>]\n"
+                     << "[-a <number of accesses for one component test>]\n"
+                     << "Must be run as root to resolve physical addresses\n"
+                     << "Must be pinned to one socket and its local memory\n";
             exit(EXIT_FAILURE);
         }
     }
@@ -495,15 +414,6 @@ int main(int argc, char *argv[])
         return EXIT_FAILURE;
     }
     cout << "Running on socket " << nodeid << endl;
-
-
-    if(doCheck)
-    {
-        if(!checkConfig(nodeid))
-        {
-            return EXIT_FAILURE;
-        }
-    }
 
     initPagemap();
     const uint64_t size = sizeGb * 1024 * 1024 * 1024ULL;
@@ -653,9 +563,99 @@ int main(int argc, char *argv[])
     }
     std::cout << "remove " << removeBack << " from back" << endl;
 
-    cout << "Channels" << endl;
-    prepareSolvePrint(channelAddresses,removeFront,removeBack);
-    cout << endl;
+
+    if(considerTadRegions)
+    {
+        auto tadRegions = SysInfo::getTadRegions(nodeid);
+        std::map<size_t,AddressSet> regionControllerAddresses;
+        std::map<size_t,std::map<size_t,AddressSet>> regionControllerChannelAddresses;
+
+        //build zones
+        for(size_t c = 0; c < channelAddresses.size(); c++)
+        {
+            auto adrList = channelAddresses.at(c);
+            for(auto a : adrList)
+            {
+                for(auto rIt = tadRegions.begin(); rIt != tadRegions.end(); rIt++)
+                {
+                    auto limitAddress = rIt->first;
+                    auto controllerList = rIt->second;
+                    if(a <= limitAddress) //found a region that matches
+                    {
+                        if(controllerList.size() > 1) // this region has controller interleaving on
+                        {
+                            auto contr = SysInfo::channelToController(c);
+                            regionControllerAddresses[limitAddress][contr].push_back(a);
+                        }
+                        for(size_t contr = 0; contr < controllerList.size(); contr++)
+                        {
+                            if(controllerList.at(contr).channelInterleaving > 1)
+                            {
+                                auto contrRef = SysInfo::channelToController(c);
+                                if(contrRef == contr)
+                                {
+                                    regionControllerChannelAddresses[limitAddress][contr][c].push_back(a);
+                                }
+                            }
+                        }
+                        break; // regions are sorted. break after first match
+                    }
+                }
+            }
+        }
+
+
+        cout << "Channels" << endl;
+        unsigned int regionIndex = 0;
+        size_t lastLimitAddress = 0;
+        const size_t REGION_UNIT = 1024*1024;
+        for(auto tadRegion : tadRegions)
+        {
+            auto limitAddress = tadRegion.first;
+            cout << "Region " << regionIndex << " from " << lastLimitAddress/REGION_UNIT << "M to " << limitAddress/REGION_UNIT << "M:" << endl;
+            auto controllerAddrSetIt = regionControllerAddresses.find(limitAddress);
+            if(controllerAddrSetIt != regionControllerAddresses.end() && !controllerAddrSetIt->second.empty() )
+            {
+                cout << "Controller Interleaving:" << endl;
+                prepareSolvePrint(controllerAddrSetIt->second,removeFront,removeBack);
+            }
+            else
+            {
+                if(tadRegion.second.size()==0)
+                {
+                    cout << "No addresses captured in this region" << endl;
+                    lastLimitAddress = limitAddress;
+                    regionIndex++;
+                    continue;
+                }
+                else if(tadRegion.second.size() == 1)
+                {
+                    cout << "Single controller" << endl;
+                }
+            }
+            auto controllerChannelAddrSetIt = regionControllerChannelAddresses.find(limitAddress);
+            if(controllerChannelAddrSetIt != regionControllerChannelAddresses.end())
+            {
+                unsigned int contrIndex = 0;
+                auto controllerChannelAddrSet = controllerChannelAddrSetIt->second;
+                for(auto contr : controllerChannelAddrSet)
+                {
+                    cout << "Channel interleaving in controller " << contrIndex << ":" << endl;
+                    prepareSolvePrint(contr.second,removeFront,removeBack);
+                    contrIndex++;
+                }
+            }
+            lastLimitAddress = limitAddress;
+            regionIndex++;
+        }
+        cout << endl;
+    }
+    else // Assume there is only one TAD region
+    {
+        cout << "Channels" << endl;
+        prepareSolvePrint(channelAddresses,removeFront,removeBack);
+        cout << endl;
+    }
 
     cout << "Ranks" << endl;
     auto setNums = getUsedSets(rankAddresses);
@@ -678,5 +678,3 @@ int main(int argc, char *argv[])
 
     return 0;
 }
-
-

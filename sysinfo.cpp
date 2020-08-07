@@ -83,9 +83,10 @@ unsigned int SysInfo::getRankInterleaveingRegionLimit(unsigned int reg)
     return reg;
 }
 
-unsigned int SysInfo::getRegionLimitAddress(unsigned int reg)
+size_t SysInfo::getRegionLimitAddress(unsigned int reg)
 {
-    return reg >> 12;
+    size_t GRANULARITY = 64*1024*1024ULL;
+    return (reg >> 12)*GRANULARITY;
 }
 
 std::vector<std::string> SysInfo::getImcs()
@@ -105,6 +106,53 @@ std::vector<std::string> SysInfo::getImcs()
         std::sort(imcs.begin(),imcs.end());
     }
     return imcs;
+}
+
+uint8_t SysInfo::getSocketInterleaving(unsigned int reg)
+{
+    return ((reg >> 10) & 0b11) + 1;
+}
+
+uint8_t SysInfo::getChannelInterleaving(unsigned int reg)
+{
+    return ((reg >> 8) & 0b11) + 1;
+}
+
+std::map<size_t,std::vector<SysInfo::TadRegion>> SysInfo::getTadRegions(unsigned int socket)
+{
+    std::map<size_t,std::vector<TadRegion>> regions; //must be ordered map
+    for(unsigned int contr = 0; contr < 2; contr++)
+    {
+        size_t lastLimit = 0;
+        unsigned int i = 0;
+        auto reg = readTadRegion(socket,contr,i);
+        auto regionLimit = getRegionLimitAddress(reg);
+        while(lastLimit != regionLimit)
+        {
+            TadRegion r;
+            r.limitAddress = regionLimit;
+            r.socketInterleaving = getSocketInterleaving(reg);
+            r.channelInterleaving = getChannelInterleaving(reg);
+            regions[regionLimit].push_back(r);
+            i++;
+            lastLimit = regionLimit;
+            reg = readTadRegion(socket,contr,i);
+            regionLimit =  getRegionLimitAddress(reg);
+        }
+    }
+    return regions;
+}
+
+uint8_t SysInfo::channelToController(uint8_t channel)
+{
+    if(channel == 0 || channel == 1)
+    {
+        return 0;
+    }
+    else // can be 2,3 or 4,5 depending on the system
+    {
+        return 1;
+    }
 }
 
 unsigned int SysInfo::getTypeOfImc(const std::string& path)
