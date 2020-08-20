@@ -164,6 +164,11 @@ int setupMeasure(int cpuid, unsigned int channel,unsigned int rank, unsigned int
     memset(&pe, 0, sizeof(struct perf_event_attr));
 
     auto imcs = SysInfo::getImcs();
+    if(imcs.size() == 0)
+    {
+        std::cout << "No memory controller PMU found" << std::endl;
+        exit(EXIT_FAILURE);
+    }
     auto imc = imcs[channel];
     pe.type = SysInfo::getTypeOfImc(imc);
     pe.size = sizeof(struct perf_event_attr);
@@ -189,12 +194,11 @@ int setupMeasure(int cpuid, unsigned int channel,unsigned int rank, unsigned int
     pe.inherit=0;
     pe.exclude_guest=1;
 
-    //how to get per-socket numbers?
-    // choose the cpu id in syscall
+    //how to get per-socket numbers? choose the cpu id in syscall
     //pid = -1 cpu >= 0 -> global measurement
     fd = perf_event_open(&pe, -1, cpuid, -1, 0);
     if (fd == -1) {
-        fprintf(stderr, "Error opening leader %llx\n", pe.config);
+        std::cout << "Setup of performance counters failed" << std::endl;
         exit(EXIT_FAILURE);
     }
 
