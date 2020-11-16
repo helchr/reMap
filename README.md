@@ -1,5 +1,12 @@
 # reMap
 A tool for reverse engineering the DRAM address mapping of Intel processors based on performance counters.
+A description of the method for reverse engineering can be found in our paper:
+
+Christian Helm, Soramichi Akiyama, Kenjiro Taura.
+**Reliable Reverse Engineering of Intel DRAM Addressing Using Performance Counters.**
+IEEE International Symposium on Modeling, Analysis, and Simulation of Computer and Telecommunication Systems (MASCOTS), November 2020. [PDF](http://www.soramichi.jp/pdf/MASCOTS2020.pdf)
+
+
 It only works on processors that have the necessary IMC performance counters and currently only supports systems with at most 4 memory channels.
 This tool requires root privilege and must be pinned to one socket.
 To compile simply use make.
